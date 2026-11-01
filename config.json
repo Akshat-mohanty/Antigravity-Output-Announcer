@@ -1,15 +1,1 @@
-{
-  "enabled": true,
-  "paused": true,
-  "mute_key": "fn",
-  "user_name": "",
-  "mode": "smart",
-  "engine": "neural",
-  "voice": "en-US-AvaNeural",
-  "rate": "+1%",
-  "max_words": 60,
-  "volume_boost": 1.3,
-  "announce_tab": true,
-  "announce_tools": false,
-  "notification": true
-}
+{"volume_boost":1.3,"max_words":60,"mute_key":"ctrl","mode":"smart","paused":false,"engine":"neural","voice":"en-US-AvaNeural","enabled":true,"notification":true,"announce_tools":false,"announce_tab":true,"rate":"+1%","user_name":""}
