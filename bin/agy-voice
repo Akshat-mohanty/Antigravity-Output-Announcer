@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+import sys
+import os
+import glob
+import time
+import uuid
+import json
+import subprocess
+
+CONFIG_PATH = os.path.expanduser("~/.gemini/config/plugins/voice-reader/config.json")
+QUEUE_DIR = "/tmp/agy_voice_queue"
+WORKER_SCRIPT = os.path.expanduser("~/.gemini/config/plugins/voice-reader/queue_worker.py")
+PID_FILE = "/tmp/agy_voice_reader.pid"
+
+def load_config():
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {
+        "enabled": True,
+        "user_name": "",
+        "mode": "smart",
+        "engine": "neural",
+        "voice": "en-US-AvaNeural",
+        "rate": "+1%",
+        "max_words": 60,
+        "volume_boost": 1.3,
+        "announce_tab": True,
+        "announce_tools": False,
+        "notification": True
+    }
+
+def save_config(cfg):
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+
+def enqueue(text, cfg):
+    os.makedirs(QUEUE_DIR, exist_ok=True)
+    job_id = f"{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
+    job_path = os.path.join(QUEUE_DIR, f"{job_id}.json")
+    job_data = {
+        "id": job_id,
+        "text": text,
+        "voice": cfg.get("voice", "en-US-AvaNeural"),
+        "engine": cfg.get("engine", "neural"),
+        "rate": cfg.get("rate", "+1%"),
+        "volume": cfg.get("volume_boost", 1.3)
+    }
+    with open(job_path, "w", encoding="utf-8") as f:
+        json.dump(job_data, f)
+
+    caffeinate_bin = "/usr/bin/caffeinate"
+    if os.path.exists(caffeinate_bin):
+        cmd = [caffeinate_bin, "-i", "-s", "-m", sys.executable, WORKER_SCRIPT]
+    else:
+        cmd = [sys.executable, WORKER_SCRIPT]
+
+    subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+        start_new_session=True
+    )
+
+def stop_all_speech():
+    for f in glob.glob(os.path.join(QUEUE_DIR, "*.json")):
+        try:
+            os.remove(f)
+        except Exception:
+            pass
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE, "r") as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 15)
+        except Exception:
+            pass
+        try:
+            os.remove(PID_FILE)
+        except Exception:
+            pass
+    cancel_file = "/tmp/agy_voice_cancelled"
+    if os.path.exists(cancel_file):
+        try:
+            os.remove(cancel_file)
+        except Exception:
+            pass
+    subprocess.run(["killall", "-9", "afplay", "say", "voice_ctrl_monitor", "voice_fn_monitor"], stderr=subprocess.DEVNULL)
+    print("✓ Stopped speech and cleared pending queue.")
+
+def main():
+    args = sys.argv[1:]
+    if not args or args[0] in ("-h", "--help", "help"):
+        print("""agy-voice: Antigravity CLI Voice Output Controller
+
+Usage:
+  agy-voice status              Show current voice reader settings & pending queue
+  agy-voice name <your_name>    Change your name
+  agy-voice mode <type>         Set reading mode: smart (default), headline, or full
+  agy-voice voice [name]        Change voice (ava, emma, ana, samantha)
+  agy-voice speed <rate>        Set speech speed (e.g. +0%, -5%, +10%)
+  agy-voice vol <level>         Set volume boost (0.5 to 2.0, default: 1.3)
+  agy-voice on                  Enable speech output
+  agy-voice off                 Disable speech output
+  agy-voice stop                Stop currently playing speech & clear pending queue
+  agy-voice tab [on|off]        Toggle announcing tab/workspace name
+  agy-voice notify [on|off]     Toggle desktop notifications
+  agy-voice yt [start|stop|status|check]  YouTube subscriber tracker for @tasteandtours
+  agy-voice test [message]      Enqueue a test phrase
+
+Shortcut:
+  Press the Control key (Ctrl ⌃) anytime while audio is playing to immediately silence reading.
+""")
+        return
+
+    cmd = args[0].lower()
+    cfg = load_config()
+
+    if cmd == "status":
+        pending_jobs = len(glob.glob(os.path.join(QUEUE_DIR, "*.json")))
+        print("Antigravity Voice Reader Status:")
+        print(f"  User Name:       {cfg.get('user_name') or '(none)'}")
+        print(f"  Voice:           {cfg.get('voice', 'en-US-AvaNeural')}")
+        print(f"  Engine:          {cfg.get('engine', 'neural')} (ultra-realistic AI neural)")
+        print(f"  Mode:            {cfg.get('mode', 'smart')} (smart = lead takeaway + next step)")
+        print(f"  Speed:           {cfg.get('rate', '+1%')}")
+        print(f"  Volume Boost:    {cfg.get('volume_boost', 1.3)}x")
+        print(f"  Queue Status:    {pending_jobs} item(s) pending")
+        print(f"  Announce Tab:    {'✓ Yes' if cfg.get('announce_tab', True) else '✗ No'}")
+        print(f"  Notification:    {'✓ Yes' if cfg.get('notification', True) else '✗ No'}")
+        print("  Ctrl Key Silence: ✓ Enabled (Press Control ⌃ to stop)")
+
+    elif cmd == "name":
+        if len(args) < 2:
+            print(f"Current name: {cfg.get('user_name') or '(none)'}")
+            return
+        name = args[1]
+        cfg["user_name"] = name
+        save_config(cfg)
+        print(f"✓ Name set to {name}.")
+        enqueue(f"Hey {name}, I will call you {name} from now on.", cfg)
+
+    elif cmd == "mode":
+        if len(args) < 2:
+            print(f"Current mode: {cfg.get('mode', 'smart')}")
+            return
+        m = args[1].lower()
+        if m in ("smart", "headline", "full"):
+            cfg["mode"] = m
+            save_config(cfg)
+            print(f"✓ Reading mode set to '{m}'.")
+        else:
+            print("Invalid mode. Choose: smart, headline, or full.")
+
+    elif cmd == "speed":
+        if len(args) < 2:
+            print(f"Current speed: {cfg.get('rate', '+1%')}")
+            return
+        r = args[1]
+        cfg["rate"] = r
+        save_config(cfg)
+        print(f"✓ Speed set to {r}.")
+
+    elif cmd == "vol":
+        if len(args) < 2:
+            print("Usage: agy-voice vol <0.5 to 2.0> (e.g. agy-voice vol 1.4)")
+            return
+        try:
+            v = float(args[1])
+            cfg["volume_boost"] = v
+            save_config(cfg)
+            print(f"✓ Volume boost set to {v}x.")
+        except ValueError:
+            print("Invalid number.")
+
+    elif cmd == "voice":
+        voice_map = {
+            "ava": "en-US-AvaNeural",
+            "emma": "en-US-EmmaNeural",
+            "ana": "en-US-AnaNeural",
+            "jenny": "en-US-JennyNeural",
+            "samantha": "Samantha"
+        }
+        if len(args) < 2:
+            print("Current voice:", cfg.get("voice", "en-US-AvaNeural"))
+            print("\nRecommended Natural American Female Voices:")
+            print("  - ava      : Ava Neural (Young, expressive, fast - Active)")
+            print("  - emma     : Emma Neural (Young, conversational)")
+            print("  - ana      : Ana Neural (Youthful American)")
+            print("  - samantha : Samantha (macOS offline system voice)")
+            return
+        v_input = args[1].lower()
+        v_name = voice_map.get(v_input, args[1])
+        cfg["voice"] = v_name
+        cfg["engine"] = "system" if v_name.lower() in ("samantha", "daniel", "alex") else "neural"
+        save_config(cfg)
+        print(f"✓ Voice set to {v_name}.")
+        enqueue("I am your new voice.", cfg)
+
+    elif cmd == "on":
+        cfg["enabled"] = True
+        save_config(cfg)
+        print("✓ agy voice reading enabled.")
+
+    elif cmd == "off":
+        cfg["enabled"] = False
+        save_config(cfg)
+        stop_all_speech()
+        print("✗ agy voice reading disabled.")
+
+    elif cmd == "stop":
+        stop_all_speech()
+
+    elif cmd == "tab":
+        if len(args) < 2:
+            val = not cfg.get("announce_tab", True)
+        else:
+            val = args[1].lower() in ("on", "true", "yes", "1")
+        cfg["announce_tab"] = val
+        save_config(cfg)
+        print(f"✓ Announce tab set to: {'on' if val else 'off'}.")
+
+    elif cmd == "notify":
+        if len(args) < 2:
+            val = not cfg.get("notification", True)
+        else:
+            val = args[1].lower() in ("on", "true", "yes", "1")
+        cfg["notification"] = val
+        save_config(cfg)
+        print(f"✓ Desktop notifications set to: {'on' if val else 'off'}.")
+
+    elif cmd == "test":
+        msg = " ".join(args[1:]) if len(args) > 1 else "Background audio and tab numbers are now verified."
+        print(f"Enqueued: '{msg}'")
+        enqueue(msg, cfg)
+
+    elif cmd == "yt":
+        yt_script = os.path.expanduser("~/.gemini/config/plugins/voice-reader/youtube_tracker.py")
+        sub_args = args[1:] if len(args) > 1 else ["status"]
+        subprocess.run([sys.executable, yt_script] + sub_args)
+
+    else:
+        print(f"Unknown command: {cmd}. Run 'agy-voice help' for usage.")
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "user_name": "",
+  "mode": "smart",
+  "engine": "neural",
+  "voice": "en-US-AvaNeural",
+  "rate": "+1%",
+  "max_words": 60,
+  "volume_boost": 1.3,
+  "announce_tab": true,
+  "announce_tools": false,
+  "notification": true
+}

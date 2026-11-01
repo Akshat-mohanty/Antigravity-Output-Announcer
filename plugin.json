@@ -1,0 +1,10 @@
+{
+  "name": "voice-reader",
+  "displayName": "Voice Reader",
+  "version": "1.0.0",
+  "description": "Reads agy CLI outputs aloud via macOS text-to-speech whenever a terminal tab finishes a turn.",
+  "author": {
+    "name": "Akshat Mohanty"
+  },
+  "license": "MIT"
+}

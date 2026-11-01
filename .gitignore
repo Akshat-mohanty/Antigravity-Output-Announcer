@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Native binaries (compiled on demand via swiftc)
+bin/voice_ctrl_monitor
+bin/voice_fn_monitor
+bin/find_tab_bar
+bin/tab_detector
+
+# Runtime temporary and log files
+*.log
+/tmp/
