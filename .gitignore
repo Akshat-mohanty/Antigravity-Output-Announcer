@@ -9,6 +9,7 @@ __pycache__/
 .LSOverride
 
 # Native binaries (compiled on demand via swiftc)
+bin/voice_mute_monitor
 bin/voice_ctrl_monitor
 bin/voice_fn_monitor
 bin/find_tab_bar

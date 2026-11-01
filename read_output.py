@@ -86,13 +86,23 @@ print(0)
 
 def ensure_voice_ctrl_monitor_bin():
     bin_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin")
-    monitor_bin = os.path.join(bin_dir, "voice_ctrl_monitor")
-    swift_src = os.path.join(bin_dir, "voice_ctrl_monitor.swift")
+    monitor_bin = os.path.join(bin_dir, "voice_mute_monitor")
+    swift_src = os.path.join(bin_dir, "voice_mute_monitor.swift")
     if not os.path.exists(monitor_bin) and os.path.exists(swift_src):
         try:
             subprocess.run(["swiftc", "-O", swift_src, "-o", monitor_bin], capture_output=True, timeout=10.0)
         except Exception:
             pass
+    if not os.path.exists(monitor_bin):
+        # Fallback to ctrl monitor
+        ctrl_bin = os.path.join(bin_dir, "voice_ctrl_monitor")
+        ctrl_src = os.path.join(bin_dir, "voice_ctrl_monitor.swift")
+        if not os.path.exists(ctrl_bin) and os.path.exists(ctrl_src):
+            try:
+                subprocess.run(["swiftc", "-O", ctrl_src, "-o", ctrl_bin], capture_output=True, timeout=10.0)
+            except Exception:
+                pass
+        return ctrl_bin
     return monitor_bin
 
 
@@ -649,8 +659,8 @@ def main():
 
     config = load_config()
 
-    if not config.get("enabled", True):
-        log("Voice reader disabled in config.")
+    if not config.get("enabled", True) or config.get("paused", False):
+        log("Voice reader disabled or paused in config.")
         print(json.dumps({}))
         return
 

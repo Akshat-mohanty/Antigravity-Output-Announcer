@@ -91,8 +91,31 @@ def stop_all_speech():
             os.remove(cancel_file)
         except Exception:
             pass
-    subprocess.run(["killall", "-9", "afplay", "say", "voice_ctrl_monitor", "voice_fn_monitor"], stderr=subprocess.DEVNULL)
+    subprocess.run(["killall", "-9", "afplay", "say", "voice_ctrl_monitor", "voice_fn_monitor", "voice_mute_monitor"], stderr=subprocess.DEVNULL)
     print("✓ Stopped speech and cleared pending queue.")
+
+def open_gui():
+    ui_script = os.path.expanduser("~/.gemini/config/plugins/voice-reader/ui_server.py")
+    if not os.path.exists(ui_script):
+        # Fallback to local repo path if running uninstalled
+        ui_script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui_server.py")
+    
+    # Check if port 48123 is already open
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        is_running = (s.connect_ex(('127.0.0.1', 48123)) == 0)
+    
+    if not is_running and os.path.exists(ui_script):
+        subprocess.Popen(
+            [sys.executable, ui_script],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            start_new_session=True
+        )
+        time.sleep(0.4)
+    subprocess.run(["open", "http://127.0.0.1:48123"])
+    print("✓ Opened Antigravity Announcer Dashboard at http://127.0.0.1:48123")
 
 def main():
     args = sys.argv[1:]
@@ -100,7 +123,11 @@ def main():
         print("""agy-voice: Antigravity CLI Voice Output Controller
 
 Usage:
-  agy-voice status              Show current voice reader settings & pending queue
+  agy-voice gui                 Open the aesthetic web GUI dashboard
+  agy-voice status              Show current settings, pause state & queue
+  agy-voice run                 Resume / run the voice announcer
+  agy-voice pause               Pause the voice announcer (silences turns)
+  agy-voice key [name]          Change muting key (ctrl, fn, esc, alt, cmd, space, shift)
   agy-voice name <your_name>    Change your name
   agy-voice mode <type>         Set reading mode: smart (default), headline, or full
   agy-voice voice [name]        Change voice (ava, emma, ana, samantha)
@@ -114,17 +141,25 @@ Usage:
   agy-voice yt [start|stop|status|check]  YouTube subscriber tracker for @tasteandtours
   agy-voice test [message]      Enqueue a test phrase
 
-Shortcut:
-  Press the Control key (Ctrl ⌃) anytime while audio is playing to immediately silence reading.
+Silence Shortcut:
+  Press your configured mute key (default: Control ⌃) anytime to silence speech.
 """)
         return
 
     cmd = args[0].lower()
     cfg = load_config()
 
-    if cmd == "status":
+    if cmd in ("gui", "ui", "dashboard"):
+        open_gui()
+
+    elif cmd == "status":
         pending_jobs = len(glob.glob(os.path.join(QUEUE_DIR, "*.json")))
+        is_paused = cfg.get("paused", False)
+        is_enabled = cfg.get("enabled", True)
+        state_str = "⏸ Paused" if is_paused else ("✓ Running" if is_enabled else "✗ Disabled")
         print("Antigravity Voice Reader Status:")
+        print(f"  Script State:    {state_str}")
+        print(f"  Mute Audio Key:  {cfg.get('mute_key', 'control').upper()} (press to silence)")
         print(f"  User Name:       {cfg.get('user_name') or '(none)'}")
         print(f"  Voice:           {cfg.get('voice', 'en-US-AvaNeural')}")
         print(f"  Engine:          {cfg.get('engine', 'neural')} (ultra-realistic AI neural)")
@@ -134,7 +169,31 @@ Shortcut:
         print(f"  Queue Status:    {pending_jobs} item(s) pending")
         print(f"  Announce Tab:    {'✓ Yes' if cfg.get('announce_tab', True) else '✗ No'}")
         print(f"  Notification:    {'✓ Yes' if cfg.get('notification', True) else '✗ No'}")
-        print("  Ctrl Key Silence: ✓ Enabled (Press Control ⌃ to stop)")
+
+    elif cmd in ("pause", "halt"):
+        cfg["paused"] = True
+        save_config(cfg)
+        stop_all_speech()
+        print("⏸ Voice announcer is now PAUSED. Completed turns will be silent.")
+
+    elif cmd in ("run", "resume", "start"):
+        cfg["paused"] = False
+        cfg["enabled"] = True
+        save_config(cfg)
+        print("▶ Voice announcer is now RUNNING. Completed turns will be read aloud.")
+
+    elif cmd in ("key", "mute-key", "hotkey"):
+        if len(args) < 2:
+            print(f"Current mute key: {cfg.get('mute_key', 'control').upper()}")
+            print("Supported keys: ctrl, fn, esc, alt, cmd, space, shift")
+            return
+        key_choice = args[1].lower()
+        if key_choice in ("ctrl", "control", "fn", "function", "esc", "escape", "alt", "option", "cmd", "command", "space", "shift"):
+            cfg["mute_key"] = key_choice
+            save_config(cfg)
+            print(f"✓ Mute key changed to: {key_choice.upper()}")
+        else:
+            print(f"Unknown key '{key_choice}'. Choose: ctrl, fn, esc, alt, cmd, space, shift")
 
     elif cmd == "name":
         if len(args) < 2:

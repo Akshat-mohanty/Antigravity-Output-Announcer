@@ -8,7 +8,7 @@ echo "=== Installing Antigravity Output Announcer ==="
 
 # 1. Install Python dependencies
 echo "-> Installing Python dependencies..."
-python3 -m pip install -r "$(dirname "$0")/requirements.txt" --quiet
+python3 -m pip install -r "$(dirname "$0")/requirements.txt" --break-system-packages --quiet 2>/dev/null || python3 -m pip install -r "$(dirname "$0")/requirements.txt" --quiet 2>/dev/null || true
 
 # 2. Ensure target plugin directory exists
 echo "-> Setting up plugin directory at $PLUGIN_TARGET_DIR..."
@@ -20,6 +20,7 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 cp "$REPO_DIR/read_output.py" "$PLUGIN_TARGET_DIR/"
 cp "$REPO_DIR/queue_worker.py" "$PLUGIN_TARGET_DIR/"
 cp "$REPO_DIR/speaker.py" "$PLUGIN_TARGET_DIR/"
+cp "$REPO_DIR/ui_server.py" "$PLUGIN_TARGET_DIR/"
 cp "$REPO_DIR/youtube_tracker.py" "$PLUGIN_TARGET_DIR/"
 cp "$REPO_DIR/hooks.json" "$PLUGIN_TARGET_DIR/"
 cp "$REPO_DIR/plugin.json" "$PLUGIN_TARGET_DIR/"
@@ -35,6 +36,7 @@ cp "$REPO_DIR/bin/"*.swift "$PLUGIN_TARGET_DIR/bin/"
 # 4. Compile Swift helper binaries
 echo "-> Compiling native Swift monitor binaries..."
 if command -v swiftc &>/dev/null; then
+    swiftc -O "$PLUGIN_TARGET_DIR/bin/voice_mute_monitor.swift" -o "$PLUGIN_TARGET_DIR/bin/voice_mute_monitor"
     swiftc -O "$PLUGIN_TARGET_DIR/bin/voice_ctrl_monitor.swift" -o "$PLUGIN_TARGET_DIR/bin/voice_ctrl_monitor"
     swiftc -O "$PLUGIN_TARGET_DIR/bin/voice_fn_monitor.swift" -o "$PLUGIN_TARGET_DIR/bin/voice_fn_monitor"
     swiftc -O "$PLUGIN_TARGET_DIR/bin/find_tab_bar.swift" -o "$PLUGIN_TARGET_DIR/bin/find_tab_bar"
@@ -49,4 +51,5 @@ chmod +x "$LOCAL_BIN_DIR/agy-voice"
 
 echo ""
 echo "✓ Installation complete!"
-echo "Run 'agy-voice status' to verify the installation."
+echo "Run 'agy-voice gui' to open the GUI dashboard."
+echo "Run 'agy-voice status' to verify settings."

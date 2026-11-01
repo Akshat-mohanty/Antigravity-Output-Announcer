@@ -8,33 +8,52 @@ import subprocess
 PID_FILE = "/tmp/agy_voice_reader.pid"
 AUDIO_FILE = "/tmp/agy_speech.mp3"
 CANCEL_FILE = "/tmp/agy_voice_cancelled"
-PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
-MONITOR_BIN = os.path.join(PLUGIN_DIR, "bin", "voice_ctrl_monitor")
+CONFIG_FILE = os.path.join(PLUGIN_DIR, "config.json")
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                import json
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
 
 def is_cancelled():
     return os.path.exists(CANCEL_FILE)
 
-def start_monitor():
-    if not os.path.exists(MONITOR_BIN):
-        swift_src = os.path.join(PLUGIN_DIR, "bin", "voice_ctrl_monitor.swift")
-        if os.path.exists(swift_src):
-            try:
-                subprocess.run(["swiftc", "-O", swift_src, "-o", MONITOR_BIN], capture_output=True, timeout=10.0)
-            except Exception:
-                pass
-    if os.path.exists(MONITOR_BIN):
+def ensure_monitor():
+    bin_dir = os.path.join(PLUGIN_DIR, "bin")
+    mute_bin = os.path.join(bin_dir, "voice_mute_monitor")
+    mute_src = os.path.join(bin_dir, "voice_mute_monitor.swift")
+    if not os.path.exists(mute_bin) and os.path.exists(mute_src):
         try:
-            if os.path.exists(CANCEL_FILE):
-                os.remove(CANCEL_FILE)
-            return subprocess.Popen(
-                [MONITOR_BIN, "--parent", str(os.getpid())],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                close_fds=True
-            )
+            subprocess.run(["swiftc", "-O", mute_src, "-o", mute_bin], capture_output=True, timeout=10.0)
         except Exception:
             pass
-    return None
+    if os.path.exists(mute_bin):
+        return mute_bin
+    ctrl_bin = os.path.join(bin_dir, "voice_ctrl_monitor")
+    return ctrl_bin if os.path.exists(ctrl_bin) else None
+
+def start_monitor():
+    mon_bin = ensure_monitor()
+    if not mon_bin or not os.path.exists(mon_bin):
+        return None
+    try:
+        if os.path.exists(CANCEL_FILE):
+            os.remove(CANCEL_FILE)
+        cfg = load_config()
+        mute_key = cfg.get("mute_key", "control")
+        return subprocess.Popen(
+            [mon_bin, "--parent", str(os.getpid()), "--key", str(mute_key)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True
+        )
+    except Exception:
+        return None
 
 def stop_monitor(proc):
     if proc:

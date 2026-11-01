@@ -1,5 +1,7 @@
 {
   "enabled": true,
+  "paused": true,
+  "mute_key": "fn",
   "user_name": "",
   "mode": "smart",
   "engine": "neural",
